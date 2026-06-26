@@ -340,6 +340,40 @@ export const useChatStore = defineStore('chat', () => {
     return await sendAndGetReply()
   }
 
+  // 重新发送最后一条用户消息的响应（AI 回复失败时使用）
+  async function retryLastResponse() {
+    // 找到最后一条用户消息
+    let lastUserMsg = null
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      if (messages.value[i].role === 'user') {
+        lastUserMsg = messages.value[i]
+        break
+      }
+    }
+    if (!lastUserMsg) {
+      throw new Error('没有找到可重发的用户消息')
+    }
+
+    // 删除该用户消息之后的所有 AI 消息
+    const newMessages = []
+    for (const msg of messages.value) {
+      if (msg.floor <= lastUserMsg.floor) {
+        newMessages.push(msg)
+      }
+    }
+    messages.value = newMessages
+
+    // 删除数据库中的后续消息
+    await db.messages
+      .where('floor')
+      .above(lastUserMsg.floor)
+      .and(f => f.conversationId === currentConversation.value.id)
+      .delete()
+
+    // 重新请求 AI 回复
+    return await sendAndGetReply()
+  }
+
   // 编辑消息
   async function editMessage(msgId, newContent) {
     await db.messages.update(msgId, { content: newContent })
@@ -431,6 +465,7 @@ export const useChatStore = defineStore('chat', () => {
     sendAndGetReply,
     stopStreaming,
     regenerate,
+    retryLastResponse,
     editMessage,
     deleteMessage,
     toggleHideFloor,

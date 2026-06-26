@@ -69,6 +69,7 @@
               <button @click="startEdit(msg)" title="编辑">✏️</button>
               <button @click="deleteMsg(msg.id)" title="删除">🗑️</button>
               <button v-if="msg.role === 'assistant'" @click="handleRegenerate" title="重新生成">🔄</button>
+              <button v-if="msg.role === 'user'" @click="handleResend(msg)" title="重发（重新获取AI回复）">🔁</button>
               <button @click="chatStore.toggleHideFloor(msg.floor)" :title="msg.hidden ? '显示' : '隐藏'">
                 {{ msg.hidden ? '👁️' : '🙈' }}
               </button>
@@ -301,6 +302,20 @@ function handleSendOrChatMessage() {
 async function handleRegenerate() {
   try {
     await chatStore.regenerate()
+  } catch (error) {
+    alert(error.message)
+  }
+}
+
+// 重发最后一条用户消息（AI 回复失败时使用）
+async function handleResend(userMsg) {
+  try {
+    // 如果最后一条是 AI 消息（部分回复），先删除它
+    const lastMsg = chatStore.messages[chatStore.messages.length - 1]
+    if (lastMsg && lastMsg.role === 'assistant' && lastMsg.floor > userMsg.floor) {
+      await chatStore.deleteMessage(lastMsg.id)
+    }
+    await chatStore.retryLastResponse()
   } catch (error) {
     alert(error.message)
   }
