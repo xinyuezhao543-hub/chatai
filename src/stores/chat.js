@@ -196,18 +196,6 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    // 3. 行程表（近7天）
-    const now = new Date()
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const schedules = await db.schedules
-      .where('date')
-      .aboveOrEqual(sevenDaysAgo.toISOString().split('T')[0])
-      .toArray()
-
-    if (schedules.length > 0) {
-      const scheduleText = schedules.map(s => `[${s.date}] ${s.type === 'ai' ? 'AI行程' : '用户行程'}: ${s.content}`).join('\n')
-      systemPrompt += '\n\n[近期行程]\n' + scheduleText
-    }
 
     // 4. 时间戳
     if (settings.showTimestamp) {
