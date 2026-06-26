@@ -159,13 +159,15 @@ async function saveAndAddEntry() {
 async function saveEntry(entry) {
   console.log('saving entry:', entry.id, entry)
   try {
-    await db.worldBookEntries.update(entry.id, {
-      title: entry.title,
-      content: entry.content,
-      keywords: entry.keywords,
-      enabled: entry.enabled,
-      depth: entry.depth
-    })
+    // 用纯对象保存，避免 Vue Proxy 导致 DataCloneError
+    const plain = {
+      title: entry.title || '',
+      content: entry.content || '',
+      keywords: entry.keywords ? [...entry.keywords] : [],
+      enabled: !!entry.enabled,
+      depth: entry.depth || 5
+    }
+    await db.worldBookEntries.update(entry.id, plain)
     console.log('saved successfully')
   } catch (e) {
     console.error('save error:', e)
