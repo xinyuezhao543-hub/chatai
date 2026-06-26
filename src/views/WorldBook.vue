@@ -37,15 +37,15 @@
           <div v-if="expandedId === entry.id" class="entry-body">
             <div class="form-group">
               <label>条目标题</label>
-              <input v-model="entry.title" class="input" @blur="saveEntry(entry)" />
+              <input v-model="entry.title" class="input" @input="debouncedSave(entry)" @blur="saveEntry(entry)" />
             </div>
             <div class="form-group">
               <label>内容</label>
-              <textarea v-model="entry.content" class="input" rows="4" @blur="saveEntry(entry)"></textarea>
+              <textarea v-model="entry.content" class="input" rows="4" @input="debouncedSave(entry)" @blur="saveEntry(entry)"></textarea>
             </div>
             <div class="form-group">
               <label>关键词（逗号分隔，对话中出现关键词时自动激活）</label>
-              <input :value="entry.keywords?.join(',')" class="input" @blur="updateKeywords(entry, $event)" />
+              <input :value="entry.keywords?.join(',')" class="input" @input="updateKeywords(entry, $event)" @blur="updateKeywords(entry, $event)" />
             </div>
             <div class="form-group toggle-group">
               <label>常驻启用（始终激活）</label>
@@ -65,6 +65,13 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import db from '../db'
+
+// 防抖保存
+let saveTimer = null
+function debouncedSave(entry) {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => saveEntry(entry), 300)
+}
 
 const route = useRoute()
 const worldBooks = ref([])
