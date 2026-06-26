@@ -30,6 +30,78 @@ jobs:
 
       - run: npx cap sync android
 
+      # 替换安卓图标
+      - name: Replace app icons
+        run: |
+          # 用项目图标替换默认图标
+          ICON_SRC="public/icons/icon-512.png"
+          if [ -f "$ICON_SRC" ]; then
+            # 安装 imagemagick 来缩放图标
+            sudo apt-get install -y imagemagick > /dev/null 2>&1
+            
+            # 生成各尺寸图标
+            RES_DIR="android/app/src/main/res"
+            convert "$ICON_SRC" -resize 48x48 "$RES_DIR/mipmap-mdpi/ic_launcher.png"
+            convert "$ICON_SRC" -resize 72x72 "$RES_DIR/mipmap-hdpi/ic_launcher.png"
+            convert "$ICON_SRC" -resize 96x96 "$RES_DIR/mipmap-xhdpi/ic_launcher.png"
+            convert "$ICON_SRC" -resize 144x144 "$RES_DIR/mipmap-xxhdpi/ic_launcher.png"
+            convert "$ICON_SRC" -resize 192x192 "$RES_DIR/mipmap-xxxhdpi/ic_launcher.png"
+            
+            # 圆形图标也用同一个
+            convert "$ICON_SRC" -resize 48x48 "$RES_DIR/mipmap-mdpi/ic_launcher_round.png"
+            convert "$ICON_SRC" -resize 72x72 "$RES_DIR/mipmap-hdpi/ic_launcher_round.png"
+            convert "$ICON_SRC" -resize 96x96 "$RES_DIR/mipmap-xhdpi/ic_launcher_round.png"
+            convert "$ICON_SRC" -resize 144x144 "$RES_DIR/mipmap-xxhdpi/ic_launcher_round.png"
+            convert "$ICON_SRC" -resize 192x192 "$RES_DIR/mipmap-xxxhdpi/ic_launcher_round.png"
+            
+            echo "✅ Icons replaced"
+          else
+            echo "⚠️ Icon file not found, using default"
+          fi
+
+      # 处理签名 keystore
+      - name: Setup keystore
+        id: keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/chatai.keystore
+            echo "has_secret=true" >> $GITHUB_OUTPUT
+            echo "✅ Using stored keystore from secrets"
+          else
+            keytool -genkeypair -v \
+              -keystore android/app/chatai.keystore \
+              -alias chatai \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -storepass chatai123 \
+              -keypass chatai123 \
+              -dname "CN=ChatAI, OU=Dev, O=ChatAI, L=City, ST=State, C=CN"
+            echo "has_secret=false" >> $GITHUB_OUTPUT
+            echo "⚠️ First run - generating new keystore"
+            cp android/app/chatai.keystore /tmp/chatai.keystore
+          fi
+
+      # 输出 keystore base64 供首次保存到 Secrets
+      - name: Show keystore base64
+        if: steps.keystore.outputs.has_secret == 'false'
+        run: |
+          echo "========================================="
+          echo "⚠️ KEYSTORE NOT IN SECRETS!"
+          echo "请把以下全部内容复制到 GitHub Secrets 的 KEYSTORE_BASE64:"
+          echo "========================================="
+          base64 -w 0 android/app/chatai.keystore
+          echo ""
+          echo "========================================="
+
+      # 配置 gradle 签名
+      - name: Configure signing
+        run: |
+          # 使用 sed 在 android { 块内添加 signingConfigs
+          sed -i '/android {/a\    signingConfigs {\n        debug {\n            storeFile file("chatai.keystore")\n            storePassword "chatai123"\n            keyAlias "chatai"\n            keyPassword "chatai123"\n        }\n    }' android/app/build.gradle
+          
+          # 确保 debug buildType 使用我们的签名
+          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.debug/' android/app/build.gradle
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug
@@ -39,3 +111,11 @@ jobs:
         with:
           name: chatai-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      # 首次运行时上传 keystore
+      - name: Upload keystore (first run only)
+        if: steps.keystore.outputs.has_secret == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatai-keystore
+          path: /tmp/chatai.keystore
