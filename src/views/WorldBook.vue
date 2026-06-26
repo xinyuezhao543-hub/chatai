@@ -62,9 +62,10 @@
               </button>
             </div>
             <div class="action-buttons">
-              <button class="btn btn-primary" @click="saveEntry(entry)">💾 保存</button>
+              <button class="btn btn-primary" @click="saveEntryWithTip(entry)">💾 保存</button>
               <button class="btn btn-danger" @click="deleteEntry(entry.id)">🗑️ 删除</button>
             </div>
+            <div v-if="savedId === entry.id" class="save-tip">✅ 已保存</div>
           </div>
         </div>
       </div>
@@ -82,6 +83,7 @@ const worldBooks = ref([])
 const currentBook = ref(null)
 const entries = ref([])
 const expandedId = ref(null)
+const savedId = ref(null)
 
 onMounted(async () => {
   worldBooks.value = await db.worldBooks.toArray()
@@ -133,13 +135,22 @@ async function saveAndAddEntry() {
 }
 
 async function saveEntry(entry) {
-  await db.worldBookEntries.update(entry.id, {
-    title: entry.title,
-    content: entry.content,
-    keywords: entry.keywords,
-    enabled: entry.enabled,
-    depth: entry.depth
+  // 用 put 整体写入，确保所有字段都保存
+  await db.worldBookEntries.put({
+    id: entry.id,
+    worldBookId: entry.worldBookId,
+    title: entry.title || '',
+    content: entry.content || '',
+    keywords: entry.keywords || [],
+    enabled: !!entry.enabled,
+    depth: entry.depth || 5
   })
+}
+
+async function saveEntryWithTip(entry) {
+  await saveEntry(entry)
+  savedId.value = entry.id
+  setTimeout(() => { savedId.value = null }, 2000)
 }
 
 function updateKeywords(entry, e) {
@@ -197,4 +208,5 @@ async function toggleExpand(id) {
 .depth-help { font-size:11px; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
 .action-buttons { display:flex; gap:10px; margin-top:12px; }
 .action-buttons .btn { flex:1; }
+.save-tip { font-size:12px; color:#4caf50; margin-top:8px; }
 </style>
