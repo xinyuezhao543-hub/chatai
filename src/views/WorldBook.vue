@@ -62,10 +62,11 @@
               </button>
             </div>
             <div class="action-buttons">
-              <button class="btn btn-primary" @click="saveEntryWithTip(entry)">💾 保存</button>
+              <button class="btn btn-primary" @click="doSave(entry)">💾 保存</button>
               <button class="btn btn-danger" @click="deleteEntry(entry.id)">🗑️ 删除</button>
             </div>
             <div v-if="savedId === entry.id" class="save-tip">✅ 已保存</div>
+            <div v-if="errorMsg" class="error-tip">{{ errorMsg }}</div>
           </div>
         </div>
       </div>
@@ -84,13 +85,21 @@ const currentBook = ref(null)
 const entries = ref([])
 const expandedId = ref(null)
 const savedId = ref(null)
+const errorMsg = ref('')
 
 onMounted(async () => {
-  worldBooks.value = await db.worldBooks.toArray()
-  const id = route.params.id
-  if (id) {
-    const wb = await db.worldBooks.get(parseInt(id))
-    if (wb) await openBook(wb)
+  try {
+    worldBooks.value = await db.worldBooks.toArray()
+    console.log('worldBooks loaded:', worldBooks.value)
+    const id = route.params.id
+    if (id) {
+      const wb = await db.worldBooks.get(parseInt(id))
+      console.log('book found:', wb)
+      if (wb) await openBook(wb)
+    }
+  } catch (e) {
+    console.error('onMounted error:', e)
+    errorMsg.value = '加载失败: ' + e.message
   }
 })
 
@@ -103,7 +112,14 @@ async function createBook() {
 
 async function openBook(wb) {
   currentBook.value = wb
-  entries.value = await db.worldBookEntries.where('worldBookId').equals(wb.id).toArray()
+  try {
+    const loaded = await db.worldBookEntries.where('worldBookId').equals(wb.id).toArray()
+    console.log('entries loaded:', loaded)
+    entries.value = loaded
+  } catch (e) {
+    console.error('openBook error:', e)
+    errorMsg.value = '加载条目失败: ' + e.message
+  }
 }
 
 async function deleteBook(id) {
@@ -128,29 +144,45 @@ async function saveAndAddEntry() {
     enabled: false,
     depth: 5
   }
-  const id = await db.worldBookEntries.add(newEntry)
-  newEntry.id = id
-  entries.value.push(newEntry)
-  expandedId.value = id
+  try {
+    const id = await db.worldBookEntries.add(newEntry)
+    console.log('added entry id:', id)
+    newEntry.id = id
+    entries.value.push(newEntry)
+    expandedId.value = id
+  } catch (e) {
+    console.error('add entry error:', e)
+    errorMsg.value = '新建失败: ' + e.message
+  }
 }
 
 async function saveEntry(entry) {
-  // 用 put 整体写入，确保所有字段都保存
-  await db.worldBookEntries.put({
-    id: entry.id,
-    worldBookId: entry.worldBookId,
-    title: entry.title || '',
-    content: entry.content || '',
-    keywords: entry.keywords || [],
-    enabled: !!entry.enabled,
-    depth: entry.depth || 5
-  })
+  console.log('saving entry:', entry.id, entry)
+  try {
+    await db.worldBookEntries.update(entry.id, {
+      title: entry.title,
+      content: entry.content,
+      keywords: entry.keywords,
+      enabled: entry.enabled,
+      depth: entry.depth
+    })
+    console.log('saved successfully')
+  } catch (e) {
+    console.error('save error:', e)
+    errorMsg.value = '保存失败: ' + e.message
+    throw e
+  }
 }
 
-async function saveEntryWithTip(entry) {
-  await saveEntry(entry)
-  savedId.value = entry.id
-  setTimeout(() => { savedId.value = null }, 2000)
+async function doSave(entry) {
+  try {
+    await saveEntry(entry)
+    savedId.value = entry.id
+    setTimeout(() => { savedId.value = null }, 2000)
+    errorMsg.value = ''
+  } catch (e) {
+    // handled in saveEntry
+  }
 }
 
 function updateKeywords(entry, e) {
@@ -209,4 +241,5 @@ async function toggleExpand(id) {
 .action-buttons { display:flex; gap:10px; margin-top:12px; }
 .action-buttons .btn { flex:1; }
 .save-tip { font-size:12px; color:#4caf50; margin-top:8px; }
+.error-tip { font-size:12px; color:red; margin-top:8px; word-break:break-all; }
 </style>
