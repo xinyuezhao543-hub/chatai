@@ -118,15 +118,17 @@ async function saveAndAddEntry() {
     if (entry) await saveEntry(entry)
   }
   
-  const id = await db.worldBookEntries.add({
+  const newEntry = {
     worldBookId: currentBook.value.id,
     title: '',
     content: '',
     keywords: [],
     enabled: false,
     depth: 5
-  })
-  entries.value = await db.worldBookEntries.where('worldBookId').equals(currentBook.value.id).toArray()
+  }
+  const id = await db.worldBookEntries.add(newEntry)
+  newEntry.id = id
+  entries.value.push(newEntry)
   expandedId.value = id
 }
 
