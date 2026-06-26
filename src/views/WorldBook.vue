@@ -38,15 +38,15 @@
           <div v-if="expandedId === entry.id" class="entry-body">
             <div class="form-group">
               <label>条目标题</label>
-              <input v-model="entry.title" class="input" @input="autoSave()" @blur="saveEntry(entry)" />
+              <input v-model="entry.title" class="input" />
             </div>
             <div class="form-group">
               <label>内容</label>
-              <textarea v-model="entry.content" class="input" rows="4" @input="autoSave()" @blur="saveEntry(entry)"></textarea>
+              <textarea v-model="entry.content" class="input" rows="4"></textarea>
             </div>
             <div class="form-group">
               <label>关键词（逗号分隔，对话中出现关键词时自动激活）</label>
-              <input :value="entry.keywords?.join(',')" class="input" @input="updateKeywords(entry, $event)" @blur="updateKeywords(entry, $event)" />
+              <input :value="entry.keywords?.join(',')" class="input" @input="updateKeywords(entry, $event)" />
             </div>
             <div class="form-group">
               <label>世界书深度（数字越大，AI越容易注意到这条信息）</label>
@@ -61,7 +61,10 @@
                 {{ entry.enabled ? '是' : '否' }}
               </button>
             </div>
-            <button class="btn btn-danger" @click="deleteEntry(entry.id)">删除条目</button>
+            <div class="action-buttons">
+              <button class="btn btn-primary" @click="saveEntry(entry)">💾 保存</button>
+              <button class="btn btn-danger" @click="deleteEntry(entry.id)">🗑️ 删除</button>
+            </div>
           </div>
         </div>
       </div>
@@ -79,19 +82,6 @@ const worldBooks = ref([])
 const currentBook = ref(null)
 const entries = ref([])
 const expandedId = ref(null)
-
-// 自动保存定时器
-let autoSaveTimer = null
-function autoSave() {
-  clearTimeout(autoSaveTimer)
-  autoSaveTimer = setTimeout(() => {
-    // 保存所有已展开的条目
-    if (expandedId.value) {
-      const entry = entries.value.find(e => e.id === expandedId.value)
-      if (entry) saveEntry(entry)
-    }
-  }, 500)
-}
 
 onMounted(async () => {
   worldBooks.value = await db.worldBooks.toArray()
@@ -156,12 +146,10 @@ function updateKeywords(entry, e) {
 
 async function updateDepth(entry, e) {
   entry.depth = parseInt(e.target.value) || 5
-  await saveEntry(entry)
 }
 
 async function toggleEnabled(entry) {
   entry.enabled = !entry.enabled
-  await saveEntry(entry)
 }
 
 async function deleteEntry(id) {
@@ -205,4 +193,6 @@ async function toggleExpand(id) {
 .toggle-btn { padding:4px 12px; border-radius:16px; border:1px solid var(--border); background:var(--bg-input); color:var(--text-primary); cursor:pointer; font-size:12px; }
 .toggle-btn.active { background:var(--primary); color:white; border-color:var(--primary); }
 .depth-help { font-size:11px; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
+.action-buttons { display:flex; gap:10px; margin-top:12px; }
+.action-buttons .btn { flex:1; }
 </style>
