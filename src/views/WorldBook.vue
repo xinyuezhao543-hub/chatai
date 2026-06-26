@@ -23,7 +23,7 @@
           <button class="btn btn-ghost" @click="currentBook = null">返回列表</button>
         </div>
 
-        <button class="btn btn-primary" style="width:100%;margin-bottom:16px" @click="addEntry">+ 新建条目</button>
+        <button class="btn btn-primary" style="width:100%;margin-bottom:16px" @click="saveAndAddEntry">+ 新建条目</button>
 
         <div v-for="entry in entries" :key="entry.id" class="entry-card">
           <div class="entry-header" @click="toggleExpand(entry.id)">
@@ -31,21 +31,29 @@
             <div class="entry-badges">
               <span v-if="entry.enabled" class="badge active">常驻</span>
               <span v-if="entry.keywords?.length" class="badge">关键词</span>
+              <span v-if="entry.depth" class="badge">深度</span>
             </div>
           </div>
 
           <div v-if="expandedId === entry.id" class="entry-body">
             <div class="form-group">
               <label>条目标题</label>
-              <input v-model="entry.title" class="input" @input="debouncedSave(entry)" @blur="saveEntry(entry)" />
+              <input v-model="entry.title" class="input" @input="autoSave()" @blur="saveEntry(entry)" />
             </div>
             <div class="form-group">
               <label>内容</label>
-              <textarea v-model="entry.content" class="input" rows="4" @input="debouncedSave(entry)" @blur="saveEntry(entry)"></textarea>
+              <textarea v-model="entry.content" class="input" rows="4" @input="autoSave()" @blur="saveEntry(entry)"></textarea>
             </div>
             <div class="form-group">
               <label>关键词（逗号分隔，对话中出现关键词时自动激活）</label>
               <input :value="entry.keywords?.join(',')" class="input" @input="updateKeywords(entry, $event)" @blur="updateKeywords(entry, $event)" />
+            </div>
+            <div class="form-group">
+              <label>世界书深度（数字越大，AI越容易注意到这条信息）</label>
+              <input type="number" min="1" max="10" :value="entry.depth ?? 5" class="input" @input="updateDepth(entry, $event)" />
+              <div class="depth-help">1-3: 低优先级（仅在相关关键词出现时触发）
+5: 默认（常规匹配）
+7-10: 高优先级（即使无关也优先展示）</div>
             </div>
             <div class="form-group toggle-group">
               <label>常驻启用（始终激活）</label>
@@ -66,18 +74,24 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import db from '../db'
 
-// 防抖保存
-let saveTimer = null
-function debouncedSave(entry) {
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => saveEntry(entry), 300)
-}
-
 const route = useRoute()
 const worldBooks = ref([])
 const currentBook = ref(null)
 const entries = ref([])
 const expandedId = ref(null)
+
+// 自动保存定时器
+let autoSaveTimer = null
+function autoSave() {
+  clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(() => {
+    // 保存所有已展开的条目
+    if (expandedId.value) {
+      const entry = entries.value.find(e => e.id === expandedId.value)
+      if (entry) saveEntry(entry)
+    }
+  }, 500)
+}
 
 onMounted(async () => {
   worldBooks.value = await db.worldBooks.toArray()
@@ -107,13 +121,20 @@ async function deleteBook(id) {
   worldBooks.value = await db.worldBooks.toArray()
 }
 
-async function addEntry() {
+async function saveAndAddEntry() {
+  // 先保存当前正在编辑的条目
+  if (expandedId.value) {
+    const entry = entries.value.find(e => e.id === expandedId.value)
+    if (entry) await saveEntry(entry)
+  }
+  
   const id = await db.worldBookEntries.add({
     worldBookId: currentBook.value.id,
     title: '',
     content: '',
     keywords: [],
-    enabled: false
+    enabled: false,
+    depth: 5
   })
   entries.value = await db.worldBookEntries.where('worldBookId').equals(currentBook.value.id).toArray()
   expandedId.value = id
@@ -124,13 +145,18 @@ async function saveEntry(entry) {
     title: entry.title,
     content: entry.content,
     keywords: entry.keywords,
-    enabled: entry.enabled
+    enabled: entry.enabled,
+    depth: entry.depth
   })
 }
 
 function updateKeywords(entry, e) {
   entry.keywords = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-  saveEntry(entry)
+}
+
+async function updateDepth(entry, e) {
+  entry.depth = parseInt(e.target.value) || 5
+  await saveEntry(entry)
 }
 
 async function toggleEnabled(entry) {
@@ -145,7 +171,12 @@ async function deleteEntry(id) {
   expandedId.value = null
 }
 
-function toggleExpand(id) {
+async function toggleExpand(id) {
+  // 切换前先保存当前编辑中的条目
+  if (expandedId.value && expandedId.value !== id) {
+    const entry = entries.value.find(e => e.id === expandedId.value)
+    if (entry) await saveEntry(entry)
+  }
   expandedId.value = expandedId.value === id ? null : id
 }
 </script>
@@ -173,4 +204,5 @@ function toggleExpand(id) {
 .toggle-group { display:flex; align-items:center; justify-content:space-between; }
 .toggle-btn { padding:4px 12px; border-radius:16px; border:1px solid var(--border); background:var(--bg-input); color:var(--text-primary); cursor:pointer; font-size:12px; }
 .toggle-btn.active { background:var(--primary); color:white; border-color:var(--primary); }
+.depth-help { font-size:11px; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
 </style>

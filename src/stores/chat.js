@@ -185,8 +185,14 @@ export const useChatStore = defineStore('chat', () => {
         return false
       })
 
+      // 按深度排序：深度越大越重要，排在前面（AI更容易注意到）
+      activeEntries.sort((a, b) => (b.depth || 5) - (a.depth || 5))
+
       if (activeEntries.length > 0) {
-        systemPrompt += '\n\n[世界书设定]\n' + activeEntries.map(e => e.content).join('\n')
+        systemPrompt += '\n\n[世界书设定]\n' + activeEntries.map(e => {
+          const prefix = (e.depth || 5) >= 7 ? '[重要] ' : ''
+          return prefix + e.content
+        }).join('\n')
       }
     }
 
