@@ -15,6 +15,9 @@
     <div v-if="showMenu" class="dropdown-menu" @click.self="showMenu = false">
       <div class="menu-content">
         <button @click="handleSummarize">📝 总结对话</button>
+        <button @click="showMenu = false; $router.push(`/summary/${chatStore.currentConversation?.id}`)">📋 查看总结</button>
+        <button @click="showBatchHide = true; showMenu = false">🙈 批量隐藏</button>
+        <button @click="showSearch = true; showMenu = false">🔍 搜索消息</button>
         <button @click="$router.push(`/character/${chatStore.currentConversation?.characterId || ''}`)">👤 角色设定</button>
         <button @click="$router.push(`/worldbook/${chatStore.currentConversation?.worldBookId || ''}`)">📖 世界书</button>
         <button @click="showTokenStats = true">📊 Token 统计</button>
@@ -23,14 +26,47 @@
       </div>
     </div>
 
+    <!-- 搜索面板 -->
+    <div v-if="showSearch" class="search-panel">
+      <div class="search-bar">
+        <input
+          v-model="searchQuery"
+          class="input search-input"
+          placeholder="搜索消息内容..."
+          @input="doSearch"
+          ref="searchInputRef"
+        />
+        <button class="btn-icon" @click="showSearch = false; searchQuery = ''; searchResults = []">✕</button>
+      </div>
+      <div v-if="searchResults.length > 0" class="search-results">
+        <div
+          v-for="result in searchResults"
+          :key="result.id"
+          class="search-result-item"
+          @click="jumpToMessage(result)"
+        >
+          <span class="search-floor">#{{ result.floor }}</span>
+          <span class="search-role">{{ result.role === 'user' ? '👤' : '🤖' }}</span>
+          <span class="search-text">{{ result.content.substring(0, 60) }}{{ result.content.length > 60 ? '...' : '' }}</span>
+        </div>
+      </div>
+      <div v-else-if="searchQuery.length > 0" class="search-empty">无匹配结果</div>
+    </div>
+
     <!-- 消息列表 -->
     <div class="messages-container" ref="messagesContainer" :style="backgroundStyle">
       <div class="messages-list">
+        <!-- 加载更多按钮 -->
+        <div v-if="hasMoreMessages" class="load-more">
+          <button class="btn btn-ghost" @click="loadMore">⬆️ 加载更早的 {{ settings.maxVisibleMessages }} 条消息</button>
+        </div>
+
         <div
-          v-for="msg in chatStore.messages"
+          v-for="msg in visibleMessages"
           :key="msg.id"
           class="message-wrapper"
-          :class="[msg.role, { hidden: msg.hidden }]"
+          :class="[msg.role, { hidden: msg.hidden, highlighted: msg.id === highlightedMsgId }]"
+          :ref="el => { if (msg.id === highlightedMsgId) highlightedEl = el }"
         >
           <!-- 头像 -->
           <div class="avatar">
@@ -133,6 +169,30 @@
       </div>
     </div>
 
+    <!-- 批量隐藏弹窗 -->
+    <div v-if="showBatchHide" class="modal-overlay" @click.self="showBatchHide = false">
+      <div class="modal">
+        <h3>批量隐藏/显示消息</h3>
+        <div class="batch-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>起始楼层</label>
+              <input v-model.number="batchFrom" type="number" class="input" min="1" />
+            </div>
+            <div class="form-group">
+              <label>结束楼层</label>
+              <input v-model.number="batchTo" type="number" class="input" min="1" />
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" @click="doBatchHide(true)">🙈 隐藏范围</button>
+            <button class="btn btn-ghost" @click="doBatchHide(false)">👁️ 显示范围</button>
+            <button class="btn btn-primary" @click="showBatchHide = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 隐藏文件输入 -->
     <input type="file" ref="fileInput" accept="image/*" style="display:none" @change="onImageSelected" />
   </div>
@@ -167,12 +227,41 @@ const imagePreview = ref(null)
 const imageBase64 = ref(null)
 const showMenu = ref(false)
 const showTokenStats = ref(false)
+const showBatchHide = ref(false)
+const showSearch = ref(false)
+const searchQuery = ref('')
+const searchResults = ref([])
+const searchInputRef = ref(null)
+const highlightedMsgId = ref(null)
+const highlightedEl = ref(null)
+const batchFrom = ref(1)
+const batchTo = ref(50)
+
+// 消息分页
+const visibleCount = ref(settings.maxVisibleMessages)
+const hasMoreMessages = computed(() => chatStore.messages.length > visibleCount.value)
+const visibleMessages = computed(() => {
+  const msgs = chatStore.messages
+  if (msgs.length <= visibleCount.value) return msgs
+  return msgs.slice(msgs.length - visibleCount.value)
+})
 
 const backgroundStyle = ref({})
+
+// 草稿持久化
+const draftKey = computed(() => `draft_${route.params.id}`)
 
 onMounted(async () => {
   const conversationId = parseInt(route.params.id)
   await chatStore.loadMessages(conversationId)
+
+  // 恢复草稿
+  const savedDraft = localStorage.getItem(draftKey.value)
+  if (savedDraft) {
+    inputText.value = savedDraft
+    nextTick(autoResize)
+  }
+
   scrollToBottom()
 
   if (settings.chatBackground) {
@@ -181,6 +270,15 @@ onMounted(async () => {
       backgroundSize: 'cover',
       backgroundPosition: 'center'
     }
+  }
+})
+
+// 自动保存草稿
+watch(inputText, (val) => {
+  if (val.trim()) {
+    localStorage.setItem(draftKey.value, val)
+  } else {
+    localStorage.removeItem(draftKey.value)
   }
 })
 
@@ -539,6 +637,55 @@ async function handleClearConvAvatar() {
     await chatStore.clearConversationAiAvatar(convId)
   }
 }
+
+// 加载更多消息
+function loadMore() {
+  visibleCount.value += settings.maxVisibleMessages
+}
+
+// 搜索消息
+function doSearch() {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) {
+    searchResults.value = []
+    return
+  }
+  searchResults.value = chatStore.messages.filter(m =>
+    m.content && m.content.toLowerCase().includes(q)
+  )
+}
+
+// 跳转到消息
+function jumpToMessage(msg) {
+  showSearch.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+
+  // 确保消息在可见范围内
+  const idx = chatStore.messages.findIndex(m => m.id === msg.id)
+  if (idx >= 0) {
+    const neededCount = chatStore.messages.length - idx
+    if (neededCount > visibleCount.value) {
+      visibleCount.value = neededCount + 10
+    }
+  }
+
+  highlightedMsgId.value = msg.id
+  nextTick(() => {
+    if (highlightedEl.value) {
+      highlightedEl.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    setTimeout(() => { highlightedMsgId.value = null }, 2000)
+  })
+}
+
+// 批量隐藏/显示
+async function doBatchHide(hide) {
+  const from = Math.min(batchFrom.value, batchTo.value)
+  const to = Math.max(batchFrom.value, batchTo.value)
+  await chatStore.batchHideFloors(from, to, hide)
+  showBatchHide.value = false
+}
 </script>
 
 <style scoped>
@@ -873,6 +1020,145 @@ async function handleClearConvAvatar() {
 .modal-actions {
   margin-top: 20px;
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
+}
+
+/* 搜索面板 */
+.search-panel {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  z-index: 10;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  gap: 8px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--primary);
+}
+
+.search-results {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0 16px 8px;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.search-result-item:hover {
+  background: var(--bg-input);
+}
+
+.search-floor {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.search-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.search-empty {
+  padding: 12px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* 加载更多 */
+.load-more {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.load-more .btn {
+  font-size: 13px;
+}
+
+/* 高亮消息 */
+.message-wrapper.highlighted {
+  animation: highlight-flash 2s ease;
+}
+
+@keyframes highlight-flash {
+  0%, 100% { background: transparent; }
+  20%, 60% { background: rgba(100, 180, 255, 0.15); border-radius: 12px; }
+}
+
+/* 批量隐藏弹窗 */
+.batch-form .form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.batch-form .form-group {
+  flex: 1;
+}
+
+.batch-form .form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.form-group .input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
 }
 </style>

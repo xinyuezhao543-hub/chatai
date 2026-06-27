@@ -136,6 +136,11 @@
             {{ settings.showTimestamp ? '开' : '关' }}
           </button>
         </div>
+        <div class="form-group">
+          <label>消息分页：每次显示最近 N 条消息</label>
+          <input type="range" v-model.number="settings.maxVisibleMessages" min="20" max="500" step="10" class="range-input" />
+          <span class="hint">当前值：{{ settings.maxVisibleMessages }} 条，超出时显示"加载更多"</span>
+        </div>
       </section>
 
       <!-- 字体设置 -->

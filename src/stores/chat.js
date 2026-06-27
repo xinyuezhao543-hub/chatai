@@ -451,6 +451,16 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // 批量隐藏/显示楼层范围
+  async function batchHideFloors(from, to, hide) {
+    for (const msg of messages.value) {
+      if (msg.floor >= from && msg.floor <= to && msg.hidden !== hide) {
+        msg.hidden = hide
+        await db.messages.update(msg.id, { hidden: hide })
+      }
+    }
+  }
+
   return {
     currentConversation,
     messages,
@@ -473,6 +483,7 @@ export const useChatStore = defineStore('chat', () => {
     processCommand,
     buildApiMessages,
     setConversationAiAvatar,
-    clearConversationAiAvatar
+    clearConversationAiAvatar,
+    batchHideFloors
   }
 })

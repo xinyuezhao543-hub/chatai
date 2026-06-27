@@ -59,6 +59,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const bubbleRadius = ref(loadSetting('bubbleRadius', 16))
   const fontSize = ref(loadSetting('fontSize', 15))
 
+  // 消息分页
+  const maxVisibleMessages = ref(loadSetting('maxVisibleMessages', 100))
+
   // 自动保存到 localStorage
   const settingsToWatch = {
     apiBaseUrl, apiKey, model, availableModels,
@@ -66,7 +69,8 @@ export const useSettingsStore = defineStore('settings', () => {
     summaryApiBaseUrl, summaryApiKey, summaryModel,
     theme, showTimestamp, chatMode, chatBackground, userAvatar, aiAvatar, bubbleStyle,
     customFontData, customFontName,
-    bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize
+    bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize,
+    maxVisibleMessages
   }
 
   Object.entries(settingsToWatch).forEach(([key, refValue]) => {
@@ -132,6 +136,7 @@ export const useSettingsStore = defineStore('settings', () => {
     summaryApiBaseUrl, summaryApiKey, summaryModel,
     theme, showTimestamp, chatMode, chatBackground, userAvatar, aiAvatar, bubbleStyle,
     customFontData, customFontName,
-    bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize
+    bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize,
+    maxVisibleMessages
   }
 })

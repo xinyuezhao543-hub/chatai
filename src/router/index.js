@@ -25,6 +25,11 @@ const routes = [
      path: '/worldbook/:id?',
      name: 'WorldBook',
      component: () => import('../views/WorldBook.vue')
+   },
+   {
+     path: '/summary/:id',
+     name: 'Summary',
+     component: () => import('../views/Summary.vue')
    }
  ]
 
