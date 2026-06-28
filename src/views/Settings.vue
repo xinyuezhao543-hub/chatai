@@ -7,9 +7,7 @@
 
     <div class="settings-content">
       <!-- API 设置 -->
-      <section class="settings-section">
-        <h2>主 AI 设置</h2>
-
+      <Accordion title="主 AI 设置" :defaultOpen="true">
         <!-- 预设管理 -->
         <div class="form-group preset-group">
           <label>API 预设</label>
@@ -56,11 +54,10 @@
           <p v-if="fetchSuccess" class="success-text">{{ fetchSuccess }}</p>
           <textarea v-model="modelsText" class="input" rows="4" @blur="updateModels" placeholder="也可手动输入，每行一个模型名"></textarea>
         </div>
-      </section>
+      </Accordion>
 
       <!-- 副 AI 设置 -->
-      <section class="settings-section">
-        <h2>副 AI 设置（总结用）</h2>
+      <Accordion title="副 AI 设置（总结用）">
         <div class="form-group">
           <label>API 地址（留空则用主AI地址）</label>
           <input v-model="settings.summaryApiBaseUrl" class="input" placeholder="留空则使用主AI地址" />
@@ -73,11 +70,10 @@
           <label>总结模型</label>
           <input v-model="settings.summaryModel" class="input" placeholder="deepseek-chat" />
         </div>
-      </section>
+      </Accordion>
 
       <!-- 外观设置 -->
-      <section class="settings-section">
-        <h2>外观</h2>
+      <Accordion title="外观">
         <div class="form-group">
           <label>主题</label>
           <select v-model="settings.theme" class="input">
@@ -108,11 +104,10 @@
             <button v-if="settings.aiAvatar" class="btn btn-ghost" @click="settings.aiAvatar = ''">清除</button>
           </div>
         </div>
-      </section>
+      </Accordion>
 
       <!-- 功能设置 -->
-      <section class="settings-section">
-        <h2>功能</h2>
+      <Accordion title="功能">
         <div class="form-group toggle-group">
           <label>聊天模式（AI回复用符号分隔，像微信多条消息）</label>
           <p style="color:var(--text-sub);font-size:12px;margin:4px 0 0 0">
@@ -136,16 +131,28 @@
             {{ settings.showTimestamp ? '开' : '关' }}
           </button>
         </div>
+        <div class="form-group toggle-group">
+          <label>流式输出（打字机效果）</label>
+          <p style="color:var(--text-sub);font-size:12px;margin:4px 0 0 0">
+            关闭后等待AI完整返回再显示，Gemini流式输出容易被截断时可关闭
+          </p>
+          <button
+            class="toggle-btn"
+            :class="{ active: settings.streamEnabled }"
+            @click="settings.streamEnabled = !settings.streamEnabled"
+          >
+            {{ settings.streamEnabled ? '开' : '关' }}
+          </button>
+        </div>
         <div class="form-group">
           <label>消息分页：每次显示最近 N 条消息</label>
           <input type="range" v-model.number="settings.maxVisibleMessages" min="20" max="500" step="10" class="range-input" />
           <span class="hint">当前值：{{ settings.maxVisibleMessages }} 条，超出时显示"加载更多"</span>
         </div>
-      </section>
+      </Accordion>
 
       <!-- 字体设置 -->
-      <section class="settings-section">
-        <h2>字体</h2>
+      <Accordion title="字体">
         <div class="form-group">
           <label>自定义字体</label>
           <div class="font-preview" v-if="settings.customFontName">
@@ -159,11 +166,10 @@
           <label>字体大小：{{ settings.fontSize }}px</label>
           <input type="range" v-model.number="settings.fontSize" min="12" max="24" step="1" class="range-input" />
         </div>
-      </section>
+      </Accordion>
 
       <!-- 气泡自定义 -->
-      <section class="settings-section">
-        <h2>气泡样式</h2>
+      <Accordion title="气泡样式">
         <div class="form-group">
           <label>圆角大小：{{ settings.bubbleRadius }}px</label>
           <input type="range" v-model.number="settings.bubbleRadius" min="0" max="24" step="2" class="range-input" />
@@ -192,14 +198,13 @@
           <div class="preview-bubble ai-preview" :style="{ background: settings.bubbleAiColor, color: settings.bubbleAiTextColor, borderRadius: settings.bubbleRadius + 'px', fontSize: settings.fontSize + 'px' }">你好！有什么可以帮你的吗？</div>
         </div>
         <button class="btn btn-ghost" style="width:100%;margin-top:12px" @click="resetBubbleStyle">恢复默认气泡样式</button>
-      </section>
+      </Accordion>
 
       <!-- 角色 & 世界书管理 -->
-      <section class="settings-section">
-        <h2>管理</h2>
+      <Accordion title="管理">
         <button class="btn btn-ghost" style="width:100%" @click="$router.push('/character')">👤 管理角色设定</button>
         <button class="btn btn-ghost" style="width:100%;margin-top:8px" @click="$router.push('/worldbook')">📖 管理世界书</button>
-      </section>
+      </Accordion>
     </div>
 
     <!-- 隐藏文件输入 -->
@@ -209,9 +214,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { fetchModels } from '../utils/api'
+import Accordion from './components/Accordion.vue'
 
 const settings = useSettingsStore()
 const fileInput = ref(null)
@@ -249,7 +255,6 @@ async function handleFetchModels() {
     modelsText.value = models.join('\n')
     fetchSuccess.value = `成功拉取 ${models.length} 个模型`
 
-    // 如果当前选中的模型不在列表中，自动切换到第一个
     if (!models.includes(settings.model)) {
       settings.model = models[0]
     }
@@ -281,9 +286,7 @@ function onFileSelected(e) {
   const file = e.target.files[0]
   if (!file) return
 
-  // 保存当前 target，防止异步回调时值变化
   const target = fileTarget.value
-
   const reader = new FileReader()
   reader.onload = (event) => {
     const dataUrl = event.target.result
@@ -296,7 +299,6 @@ function onFileSelected(e) {
     }
   }
   reader.readAsDataURL(file)
-  // 延迟清除，避免某些浏览器/WebView中 File 对象被提前回收
   setTimeout(() => { e.target.value = '' }, 100)
 }
 
@@ -304,7 +306,6 @@ function onFileSelected(e) {
 function handlePresetChange(presetId) {
   if (presetId) {
     settings.loadPreset(presetId)
-    // 同步模型文本
     modelsText.value = settings.availableModels.join('\n')
   } else {
     settings.activePresetId = ''
@@ -327,7 +328,7 @@ function handleDeletePreset() {
   settings.deletePreset(settings.activePresetId)
 }
 
-// 字体管理
+// 字体管理（使用 IndexedDB 存储）
 function pickFont() {
   fontInput.value?.click()
 }
@@ -338,35 +339,16 @@ function onFontSelected(e) {
 
   const reader = new FileReader()
   reader.onload = (event) => {
-    settings.customFontData = event.target.result
-    settings.customFontName = file.name
-    applyCustomFont(event.target.result)
+    settings.saveFontToDb(event.target.result, file.name)
   }
   reader.readAsDataURL(file)
   setTimeout(() => { e.target.value = '' }, 100)
 }
 
-function clearFont() {
-  settings.customFontData = ''
-  settings.customFontName = ''
-  // 移除自定义字体
+async function clearFont() {
+  await settings.clearFont()
   const existing = document.getElementById('custom-font-style')
   if (existing) existing.remove()
-}
-
-function applyCustomFont(dataUrl) {
-  let styleEl = document.getElementById('custom-font-style')
-  if (!styleEl) {
-    styleEl = document.createElement('style')
-    styleEl.id = 'custom-font-style'
-    document.head.appendChild(styleEl)
-  }
-  styleEl.textContent = `
-    @font-face {
-      font-family: 'CustomFont';
-      src: url('${dataUrl}');
-    }
-  `
 }
 
 // 气泡样式重置
@@ -418,17 +400,6 @@ function resetBubbleStyle() {
   padding: 16px;
 }
 
-.settings-section {
-  margin-bottom: 28px;
-}
-
-.settings-section h2 {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--primary);
-  margin-bottom: 12px;
-}
-
 .form-group {
   margin-bottom: 14px;
 }
@@ -451,6 +422,7 @@ function resetBubbleStyle() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .toggle-btn {
@@ -512,7 +484,7 @@ function resetBubbleStyle() {
 
 /* 预设样式 */
 .preset-group {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 10px;
   padding: 12px;
   margin-bottom: 16px;
@@ -558,7 +530,7 @@ function resetBubbleStyle() {
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 3px;
   outline: none;
   margin-top: 8px;
@@ -593,7 +565,7 @@ function resetBubbleStyle() {
 .bubble-preview {
   margin-top: 16px;
   padding: 16px;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 12px;
 }
 

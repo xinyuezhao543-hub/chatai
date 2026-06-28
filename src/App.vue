@@ -12,9 +12,17 @@ const settingsStore = useSettingsStore()
 const themeClass = computed(() => settingsStore.theme === 'dark' ? 'theme-dark' : 'theme-light')
 
 // 初始化时应用自定义字体和气泡样式
-onMounted(() => {
-  if (settingsStore.customFontData) {
+onMounted(async () => {
+  // 从 IndexedDB 加载字体（优先）
+  const fontData = await settingsStore.loadFontFromDb()
+  if (fontData) {
+    applyCustomFont(fontData)
+  } else if (settingsStore.customFontData) {
+    // 兼容旧 localStorage 数据：迁移到 IndexedDB
     applyCustomFont(settingsStore.customFontData)
+    if (settingsStore.customFontName) {
+      await settingsStore.saveFontToDb(settingsStore.customFontData, settingsStore.customFontName)
+    }
   }
   applyBubbleStyles()
 })

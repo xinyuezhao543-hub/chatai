@@ -197,10 +197,10 @@ export const useChatStore = defineStore('chat', () => {
     }
 
 
-    // 4. 时间戳
+    // 4. 时间戳（在system prompt中标注当前时间）
     if (settings.showTimestamp) {
       const timeStr = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-      systemPrompt += `\n\n[当前时间] ${timeStr}`
+      systemPrompt += `\n\n[当前时间] ${timeStr}\n[注意] 每条对话消息前会标注发送时间，格式为 [时间] 内容。请注意时间线的连贯性。`
     }
 
     // 5. 聊天模式提示词
@@ -212,7 +212,7 @@ export const useChatStore = defineStore('chat', () => {
       apiMessages.push({ role: 'system', content: systemPrompt })
     }
 
-    // 5. 总结
+    // 5. 总结（发送所有总结，按楼层顺序拼接，保证总结链完整）
     const summaries = await db.summaries
       .where('conversationId')
       .equals(conv.id)
@@ -220,12 +220,20 @@ export const useChatStore = defineStore('chat', () => {
 
     let summarizedUpToFloor = 0
     if (summaries.length > 0) {
-      const latestSummary = summaries.sort((a, b) => b.toFloor - a.toFloor)[0]
-      summarizedUpToFloor = latestSummary.toFloor
-      apiMessages.push({ role: 'system', content: `[之前对话的总结]\n${latestSummary.content}` })
+      // 按楼层从小到大排序
+      const sortedSummaries = summaries.sort((a, b) => a.toFloor - b.toFloor)
+      const latestSummary = sortedSummaries[sortedSummaries.length - 1]
+      // 保留总结覆盖范围最后10层楼的消息，防止重roll时找不到消息
+      summarizedUpToFloor = Math.max(0, latestSummary.toFloor - 10)
+
+      // 拼接所有总结
+      const summaryText = sortedSummaries.map(s =>
+        `--- 第${s.fromFloor}-${s.toFloor}楼 ---\n${s.content}`
+      ).join('\n\n')
+      apiMessages.push({ role: 'system', content: `[之前对话的总结]\n${summaryText}` })
     }
 
-    // 6. 未被总结且未隐藏的消息
+    // 6. 未被总结覆盖且未隐藏的消息
     const visibleMessages = messages.value.filter(m => !m.hidden && m.floor > summarizedUpToFloor)
 
     // 找到最后一条用户消息的索引
@@ -239,14 +247,24 @@ export const useChatStore = defineStore('chat', () => {
 
     for (let i = 0; i < visibleMessages.length; i++) {
       const msg = visibleMessages[i]
-      const apiMsg = { role: msg.role, content: msg.content }
+      // 时间戳：在每条消息内容前加上发送时间
+      let contentWithTime = msg.content
+      if (settings.showTimestamp && msg.createdAt) {
+        const msgTime = new Date(msg.createdAt).toLocaleString('zh-CN', {
+          timeZone: 'Asia/Shanghai',
+          month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        })
+        contentWithTime = `[${msgTime}] ${msg.content}`
+      }
+      const apiMsg = { role: msg.role, content: contentWithTime }
       // 图片理解支持：只在最后一条用户消息中附带图片，历史图片不重复发送
       if (i === lastUserIdx && msg.imageBase64) {
         const imageUrl = msg.imageBase64.startsWith('data:')
           ? msg.imageBase64
           : `data:image/jpeg;base64,${msg.imageBase64}`
         apiMsg.content = [
-          { type: 'text', text: msg.content || '请描述这张图片' },
+          { type: 'text', text: contentWithTime || '请描述这张图片' },
           { type: 'image_url', image_url: { url: imageUrl } }
         ]
       }
@@ -276,10 +294,10 @@ export const useChatStore = defineStore('chat', () => {
     try {
       let fullContent
 
-      if (hasImage) {
-        // 图片请求使用非流式模式，避免中转站不支持导致卡住
-        console.log('[Chat] 检测到图片，使用非流式请求')
-        streamingContent.value = '正在识别图片...'
+      if (hasImage || !settings.streamEnabled) {
+        // 图片请求或关闭流式时使用非流式模式
+        console.log('[Chat] 使用非流式请求', hasImage ? '(含图片)' : '(流式已关闭)')
+        streamingContent.value = hasImage ? '正在识别图片...' : '正在思考...'
 
         const { chatComplete } = await import('../utils/api')
         const result = await chatComplete({

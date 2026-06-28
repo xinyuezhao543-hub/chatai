@@ -52,4 +52,16 @@ db.version(4).stores({
   schedules: null
 })
 
+// v5: 添加 settings 表用于存储字体等大文件
+db.version(5).stores({
+  conversations: '++id, title, characterId, worldBookId, createdAt, updatedAt',
+  messages: '++id, conversationId, role, floor, hidden, createdAt',
+  characters: '++id, name, createdAt',
+  worldBooks: '++id, name, createdAt',
+  worldBookEntries: '++id, worldBookId, name, enabled',
+  summaries: '++id, conversationId, fromFloor, toFloor, createdAt',
+  schedules: null,
+  settings: 'id, data'
+})
+
 export default db

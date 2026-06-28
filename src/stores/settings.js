@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import db from '../db'
 
 export const useSettingsStore = defineStore('settings', () => {
   // 从 localStorage 加载设置
@@ -62,15 +63,18 @@ export const useSettingsStore = defineStore('settings', () => {
   // 消息分页
   const maxVisibleMessages = ref(loadSetting('maxVisibleMessages', 100))
 
-  // 自动保存到 localStorage
+  // 流式输出开关
+  const streamEnabled = ref(loadSetting('streamEnabled', true))
+
+  // 自动保存到 localStorage（字体数据不在这里存，用 IndexedDB）
   const settingsToWatch = {
     apiBaseUrl, apiKey, model, availableModels,
     apiPresets, activePresetId,
     summaryApiBaseUrl, summaryApiKey, summaryModel,
     theme, showTimestamp, chatMode, chatBackground, userAvatar, aiAvatar, bubbleStyle,
-    customFontData, customFontName,
+    customFontName,
     bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize,
-    maxVisibleMessages
+    maxVisibleMessages, streamEnabled
   }
 
   Object.entries(settingsToWatch).forEach(([key, refValue]) => {
@@ -129,6 +133,35 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  // 字体持久化：使用 IndexedDB 存储大文件
+  async function saveFontToDb(dataUrl, fontName) {
+    await db.settings.put({ id: 'customFont', data: dataUrl })
+    customFontData.value = dataUrl
+    customFontName.value = fontName
+    // 清除 localStorage 中的旧字体数据（迁移）
+    localStorage.removeItem('settings_customFontData')
+  }
+
+  async function loadFontFromDb() {
+    try {
+      const record = await db.settings.get('customFont')
+      if (record && record.data) {
+        customFontData.value = record.data
+        return record.data
+      }
+    } catch (e) {
+      console.warn('加载字体失败:', e)
+    }
+    return ''
+  }
+
+  async function clearFont() {
+    await db.settings.delete('customFont')
+    customFontData.value = ''
+    customFontName.value = ''
+    localStorage.removeItem('settings_customFontData')
+  }
+
   return {
     apiBaseUrl, apiKey, model, availableModels,
     apiPresets, activePresetId,
@@ -136,7 +169,8 @@ export const useSettingsStore = defineStore('settings', () => {
     summaryApiBaseUrl, summaryApiKey, summaryModel,
     theme, showTimestamp, chatMode, chatBackground, userAvatar, aiAvatar, bubbleStyle,
     customFontData, customFontName,
+    saveFontToDb, loadFontFromDb, clearFont,
     bubbleUserColor, bubbleAiColor, bubbleUserTextColor, bubbleAiTextColor, bubbleRadius, fontSize,
-    maxVisibleMessages
+    maxVisibleMessages, streamEnabled
   }
 })
